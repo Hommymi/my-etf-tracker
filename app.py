@@ -9,7 +9,7 @@ from fpdf import FPDF
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-st.set_page_config(page_title="個股整合", layout="wide")
+st.set_page_config(page_title="個股整合監控中心", layout="wide")
 st.title("📊 3714富采 | 6854錼創 | 3593力銘 | 4178永笙-KY")
 
 # 定義股票清單
@@ -89,3 +89,30 @@ with tab2:
         st.subheader(f"📋 {name} ({sid}) 明細")
         df = all_data.get(sid)
         if df is not None:
+            st.dataframe(df.sort_index(ascending=False), use_container_width=True)
+        else:
+            st.warning(f"目前無法取得 {name} 的表格資料。")
+        st.divider()
+
+with tab3:
+    st.subheader("📦 報表匯出")
+    # PDF 產生邏輯 (簡化顯示)
+    def create_pdf(data_dict):
+        pdf = FPDF()
+        pdf.set_font("Arial", size=12)
+        for sid, df in data_dict.items():
+            if df is not None:
+                pdf.add_page()
+                pdf.cell(200, 10, txt=f"Stock Report: {sid}", ln=True, align='C')
+                pdf.ln(10)
+                # 簡單印出最後 10 筆數據
+                for i in range(min(len(df), 10)):
+                    row = df.iloc[i]
+                    pdf.cell(190, 10, txt=f"{row['日期']} | Close: {row['收盤價']} | Change: {row['漲跌價差']}", ln=True)
+        return pdf.output(dest='S').encode('latin-1')
+
+    if any(df is not None for df in all_data.values()):
+        pdf_bytes = create_pdf(all_data)
+        st.download_button("📄 下載 4 檔股票聯合 PDF 報表", pdf_bytes, "Stock_Report.pdf", "application/pdf", use_container_width=True)
+    else:
+        st.error("暫無資料可供下載")
