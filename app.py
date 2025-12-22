@@ -40,7 +40,7 @@ def get_stock_history(stock_id="2317"):
         return None
 
 # 執行抓取
-df = get_stock_history("2301")
+df = get_stock_history("2317")
 
 if df is not None:
     # 數據轉換
@@ -65,4 +65,5 @@ if df is not None:
     st.dataframe(df, use_container_width=True)
 else:
     st.warning("⚠️ 目前連線受阻或非交易時段，請稍後再試。")
+
 
