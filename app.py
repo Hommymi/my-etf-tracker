@@ -9,7 +9,7 @@ from fpdf import FPDF
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-st.set_page_config(page_title="面板/光電股監控中心", layout="wide")
+st.set_page_config(page_title="Liteon", layout="wide")
 st.title("📊 面板/光電三傑監控 (3714 | 6854 | 3593)")
 
 # 定義股票清單
@@ -96,3 +96,4 @@ with tab3:
             )
         except Exception as e:
             st.error(f"PDF Error: {e}")
+
