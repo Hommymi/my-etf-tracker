@@ -50,4 +50,49 @@ with tab1:
             df = all_data.get(sid)
             if df is not None and not df.empty:
                 latest = df.iloc[-1]
-                st.metric(
+                st.metric(f"{name} ({sid})", f"{latest['收盤價']} 元", f"{latest['漲跌價差']}")
+                fig = go.Figure(go.Scatter(x=df['日期'], y=df['收盤價'], mode='lines+markers', line=dict(color=colors[i], width=3)))
+                fig.update_layout(height=250, margin=dict(l=0, r=0, t=10, b=0))
+                st.plotly_chart(fig, use_container_width=True)
+
+with tab2:
+    for sid, name in STOCK_LIST.items():
+        st.subheader(f"{sid} Data Table")
+        df = all_data.get(sid)
+        if df is not None:
+            st.dataframe(df.sort_index(ascending=False), use_container_width=True)
+
+with tab3:
+    st.subheader("📦 Export Report")
+    
+    def create_pdf(data_dict):
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(190, 10, txt="Stock Market Report", ln=True, align='C')
+        pdf.set_font("Arial", size=12)
+        pdf.ln(10)
+        
+        for sid, df in data_dict.items():
+            if df is not None:
+                latest = df.iloc[-1]
+                # 這裡只印英文名稱和數字，絕對不要放中文，避開 latin-1 錯誤
+                name_en = STOCK_LIST[sid]
+                line = f"ID: {sid} ({name_en}) | Price: {latest['收盤價']} | Change: {latest['漲跌價差']}"
+                pdf.cell(190, 10, txt=line, ln=True)
+        
+        # 關鍵修正：直接回傳位元組字串，不進行額外的 encode('latin-1')
+        return pdf.output(dest='S')
+
+    if any(df is not None for df in all_data.values()):
+        try:
+            pdf_output = create_pdf(all_data)
+            st.download_button(
+                label="📄 Download PDF Report (English Version)",
+                data=bytes(pdf_output), # 轉成 bytes 確保 Streamlit 接受
+                file_name="report.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"PDF Error: {e}")
