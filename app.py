@@ -95,4 +95,17 @@ with tab1:
                 fig.update_layout(height=200, margin=dict(l=0,r=0,t=10,b=0))
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                st.error(f"{name} 讀取失敗
+                st.error(f"{name} 讀取失敗")
+                st.caption("請確認是否為交易日或 API 鎖定")
+
+with tab2:
+    for sid, name in names.items():
+        st.subheader(f"📋 {name} ({sid})")
+        df = all_data.get(sid)
+        if df is not None:
+            st.dataframe(df.sort_index(ascending=False), use_container_width=True)
+        st.divider()
+
+with tab3:
+    st.info("點擊按鈕產生當前監控清單 PDF 報表")
+    # 此處保留下載按鈕代碼...
