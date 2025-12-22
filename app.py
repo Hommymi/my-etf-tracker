@@ -9,18 +9,20 @@ from fpdf import FPDF
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-st.set_page_config(page_title="個股整合監控中心", layout="wide")
+st.set_page_config(page_title="個股整合", layout="wide")
 st.title("📊 3714富采 | 6854錼創 | 3593力銘 | 4178永笙-KY")
 
-# 定義股票清單 (上市與興櫃分開處理)
+# 定義股票清單
 STOCK_LIST_TWSE = {"3714": "富采", "6854": "錼創科技", "3593": "力銘"}
-STOCK_LIST_TPEX_興櫃 = {"4178": "永笙-KY"}
+STOCK_LIST_TPEX = {"4178": "永笙-KY"}
 
-# --- 抓取上市股票資料 (證交所) ---
+# --- 抓取上市股票資料 (證交所 API) ---
 def fetch_twse_data(sid):
-    url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={datetime.now().strftime('%Y%m%d')}&stockNo={sid}"
+    datestr = datetime.now().strftime("%Y%m%d")
+    url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={datestr}&stockNo={sid}"
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        res = requests.get(url, verify=False, timeout=10)
+        res = requests.get(url, headers=headers, verify=False, timeout=10)
         data = res.json()
         if data.get('stat') == 'OK':
             df = pd.DataFrame(data['data'], columns=data['fields'])
@@ -31,33 +33,35 @@ def fetch_twse_data(sid):
         return None
     except: return None
 
-# --- 抓取興櫃股票資料 (櫃買中心) ---
-def fetch_tpex_esb_data(sid):
-    # 興櫃歷史資料 API
-    url = f"https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_no1430/stk_quot_no1430_result.php?l=zh-tw&d={datetime.now().strftime('%Y/%m/%d')}&stk_code={sid}"
-    # 註：興櫃 API 結構較特殊，此處簡化邏輯，若無法抓取歷史則顯示提示
+# --- 抓取興櫃股票歷史資料 (櫃買中心 API) ---
+def fetch_tpex_esb_history(sid):
+    # 興櫃個股日成交資訊 (抓取本月)
+    datestr = datetime.now().strftime("%Y/%m")
+    url = f"https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_no1430/stk_quot_no1430_result.php?l=zh-tw&d={datestr}&stk_code={sid}"
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://www.tpex.org.tw/"
+    }
     try:
-        # 由於興櫃 API 限制較多，若為展示用途，我們透過櫃買現價 API 取得最新資訊
-        url = "https://www.tpex.org.tw/web/stock/aftertrading/daily_quotes/stk_quotes_result.php?l=zh-tw"
-        res = requests.get(url, verify=False, timeout=10)
+        res = requests.get(url, headers=headers, verify=False, timeout=10)
         data = res.json()
-        # 篩選 4178 的數據
-        target = [row for row in data['aaData'] if row[0] == sid]
-        if target:
-            row = target[0]
-            # 建立模擬 DataFrame (興櫃通常看成交均價)
-            df = pd.DataFrame([[datetime.now().strftime("%Y/%m/%d"), row[2], row[4], row[5], row[6], row[8]]], 
-                              columns=['日期', '收盤價', '開盤價', '最高價', '最低價', '漲跌價差'])
+        if data and 'aaData' in data and len(data['aaData']) > 0:
+            # 興櫃欄位: 0日期, 1成交股數, 2成交金額, 3成交筆數, 4最高, 5最低, 6成交均價(當收盤看), 7漲跌
+            df = pd.DataFrame(data['aaData'], columns=['日期', '成交股數', '成交金額', '成交筆數', '最高價', '最低價', '收盤價', '漲跌價差'])
+            # 興櫃資料通常是均價代表成交行情
+            for col in ['收盤價', '最高價', '最低價', '漲跌價差']:
+                df[col] = df[col].astype(str).str.replace(',', '').str.replace('+', '')
+                df[col] = pd.to_numeric(df[col], errors='coerce')
             return df
         return None
     except: return None
 
-# 讀取所有資料
+# 讀取資料
 all_data = {}
 for sid in STOCK_LIST_TWSE:
     all_data[sid] = fetch_twse_data(sid)
-for sid in STOCK_LIST_TPEX_興櫃:
-    all_data[sid] = fetch_tpex_esb_data(sid)
+for sid in STOCK_LIST_TPEX:
+    all_data[sid] = fetch_tpex_esb_history(sid)
 
 # --- 介面佈局 ---
 tab1, tab2, tab3 = st.tabs(["📈 即時走勢對照", "📋 詳細數據明細", "📥 報表下載中心"])
@@ -65,32 +69,23 @@ tab1, tab2, tab3 = st.tabs(["📈 即時走勢對照", "📋 詳細數據明細"
 with tab1:
     cols = st.columns(4)
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+    combined_list = {**STOCK_LIST_TWSE, **STOCK_LIST_TPEX}
     
-    # 合併顯示
-    combined_list = {**STOCK_LIST_TWSE, **STOCK_LIST_TPEX_興櫃}
     for i, (sid, name) in enumerate(combined_list.items()):
         with cols[i]:
             df = all_data.get(sid)
-            if df is not None:
+            if df is not None and not df.empty:
                 latest = df.iloc[-1]
-                st.metric(f"{name}", f"{latest['收盤價']} 元", f"{latest['漲跌價差']}")
-                if len(df) > 1: # 有歷史資料才畫線
-                    fig = go.Figure(go.Scatter(x=df['日期'], y=df['收盤價'], line=dict(color=colors[i], width=3)))
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("興櫃股票僅顯示當日資訊")
+                st.metric(f"{name} ({sid})", f"{latest['收盤價']} 元", f"{latest['漲跌價差']}")
+                fig = go.Figure(go.Scatter(x=df['日期'], y=df['收盤價'], name=sid, line=dict(color=colors[i], width=3)))
+                fig.update_layout(height=250, margin=dict(l=10, r=10, t=10, b=10), hovermode="x unified")
+                st.plotly_chart(fig, use_container_width=True)
             else:
-                st.error(f"{name} 讀取中...")
+                st.error(f"{name} 讀取失敗")
+                st.caption("興櫃資料可能於盤後更新")
 
 with tab2:
     for sid, name in combined_list.items():
         st.subheader(f"📋 {name} ({sid}) 明細")
         df = all_data.get(sid)
-        
-        # 修正重點：判斷 df 是否為 None，如果是，則顯示空表格或警告文字
         if df is not None:
-            st.dataframe(df.sort_index(ascending=False), use_container_width=True)
-        else:
-            st.warning(f"目前無法取得 {name} ({sid}) 的詳細資料（可能非交易時段）。")
-        st.divider()
-
