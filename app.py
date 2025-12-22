@@ -86,9 +86,11 @@ with tab2:
     for sid, name in combined_list.items():
         st.subheader(f"📋 {name} ({sid}) 明細")
         df = all_data.get(sid)
-        st.dataframe(df if df is not None else "暫無資料", use_container_width=True)
+        
+        # 修正重點：判斷 df 是否為 None，如果是，則顯示空表格或警告文字
+        if df is not None:
+            st.dataframe(df.sort_index(ascending=False), use_container_width=True)
+        else:
+            st.warning(f"目前無法取得 {name} ({sid}) 的詳細資料（可能非交易時段）。")
+        st.divider()
 
-with tab3:
-    st.subheader("📦 報表匯出")
-    st.info("💡 提示：興櫃股票 (永笙-KY) 資料格式與上市不同，PDF 將包含可取得之數據。")
-    # 此處保留原本 PDF 產生邏輯... (略)
