@@ -54,4 +54,16 @@ if df is not None:
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df['日期'], y=df['收盤價'], mode='lines+markers', name='收盤價', line=dict(color='#1f77b4')))
     fig.update_layout(hovermode="x unified")
-    st.
+    st.plotly_chart(fig, use_container_width=True)
+
+    # 3. 顯示原始報表
+    st.subheader("📋 每日成交明細")
+    st.dataframe(df, use_container_width=True)
+
+    # 4. 下載功能
+    csv = df.to_csv(index=False).encode('utf-8-sig')
+    st.download_button("📥 下載本月報表 (CSV)", csv, "2301_history.csv", "text/csv")
+
+else:
+    st.warning("目前無法取得證交所資料，請稍後再試。")
+
