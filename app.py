@@ -8,11 +8,11 @@ import urllib3
 # 禁用安全警告（因為我們跳過了 SSL 驗證）
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-st.set_page_config(page_title="2301 股價監控", layout="wide")
-st.title("📈 2301 光寶科 - 本月每日成交報表")
+st.set_page_config(page_title="2317 股價監控", layout="wide")
+st.title("📈 2317 鴻海 - 本月每日成交報表")
 
 @st.cache_data(ttl=3600)
-def get_stock_history(stock_id="2301"):
+def get_stock_history(stock_id="2317"):
     # 取得當前年月
     datestr = datetime.now().strftime("%Y%m%d")
     url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={datestr}&stockNo={stock_id}"
@@ -65,3 +65,4 @@ if df is not None:
     st.dataframe(df, use_container_width=True)
 else:
     st.warning("⚠️ 目前連線受阻或非交易時段，請稍後再試。")
+
