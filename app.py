@@ -80,3 +80,60 @@ with tab1:
 
 with tab2:
     st.subheader(f"📋 {sid} {name} 興櫃交易明細")
+    if df_6805 is not None:
+        st.dataframe(df_6805.sort_index(ascending=False), use_container_width=True)
+    else:
+        st.info("目前沒有歷史明細資料。")
+
+with tab3:
+    st.subheader("📦 Liteon 報表下載中心")
+    
+    if df_6805 is not None:
+        # 1. 產生 PDF 邏輯 (純英文防止噴錯)
+        def create_pdf(target_df):
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font('Arial', 'B', 16)
+            pdf.cell(190, 10, txt=f"Liteon Stock Report - {sid} ({en_name})", ln=True, align='C')
+            pdf.ln(10)
+            
+            # 表頭
+            pdf.set_fill_color(200, 220, 255)
+            pdf.set_font('Arial', 'B', 10)
+            headers = ["Date", "High", "Low", "Avg Price", "Diff"]
+            widths = [40, 35, 35, 40, 40]
+            for i, h in enumerate(headers):
+                pdf.cell(widths[i], 8, h, 1, 0, 'C', True)
+            pdf.ln()
+            
+            # 內容
+            pdf.set_font('Arial', '', 9)
+            for _, row in target_df.tail(20).iloc[::-1].iterrows():
+                pdf.cell(40, 7, str(row['日期']), 1, 0, 'C')
+                pdf.cell(35, 7, str(row['最高價']), 1, 0, 'C')
+                pdf.cell(35, 7, str(row['最低價']), 1, 0, 'C')
+                pdf.cell(40, 7, str(row['收盤價']), 1, 0, 'C')
+                pdf.cell(40, 7, str(row['漲跌價差']), 1, 1, 'C')
+            return pdf.output(dest='S')
+
+        # 下載 PDF 按鈕
+        pdf_bytes = create_pdf(df_6805)
+        st.download_button(
+            label="📄 下載永笙-KY 英文 PDF 報表",
+            data=pdf_bytes if isinstance(pdf_bytes, bytes) else pdf_bytes.encode('latin-1'),
+            file_name=f"Liteon_6805_{datetime.now().strftime('%Y%m%d')}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+        
+        st.divider()
+
+        # 下載 CSV 按鈕 (中文支援)
+        csv_data = df_6805.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📊 下載永笙-KY 中文 CSV 數據",
+            data=csv_data,
+            file_name=f"Liteon_6805_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
