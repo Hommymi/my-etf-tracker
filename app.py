@@ -66,4 +66,60 @@ def create_advanced_pdf(data_dict):
                 title = f"Stock Detail Report - {sid}"
                 header = ["Date", "High", "Low", "Close", "Diff"]
             
-            pdf.cell(1
+            pdf.cell(190, 10, txt=title, ln=True, align='C')
+            pdf.ln(5)
+            
+            # 表格標頭繪製
+            pdf.set_fill_color(220, 230, 241)
+            pdf.set_font('Arial' if not use_chinese else 'ChineseFont', '', 10)
+            widths = [40, 35, 35, 40, 40]
+            for i, h in enumerate(header):
+                pdf.cell(widths[i], 8, h, 1, 0, 'C', True)
+            pdf.ln()
+            
+            # 填入數據 (使用安全取值方式避免 Index Error)
+            pdf.set_font('Arial', '', 9)
+            recent_df = df.tail(15).iloc[::-1]
+            
+            for _, row in recent_df.iterrows():
+                # 使用 row.get() 確保欄位不存在時不會崩潰
+                pdf.cell(40, 7, str(row.get('日期', '--')), 1, 0, 'C')
+                pdf.cell(35, 7, str(row.get('最高價', '--')), 1, 0, 'C')
+                pdf.cell(35, 7, str(row.get('最低價', '--')), 1, 0, 'C')
+                pdf.cell(40, 7, str(row.get('收盤價', '--')), 1, 0, 'C')
+                pdf.cell(40, 7, str(row.get('漲跌價差', '--')), 1, 1, 'C')
+                
+    return pdf.output(dest='S')
+
+with tab1:
+    cols = st.columns(3)
+    for i, (sid, name) in enumerate(DISPLAY_NAMES.items()):
+        with cols[i]:
+            df = all_data.get(sid)
+            if df is not None and not df.empty:
+                latest = df.iloc[-1]
+                st.metric(f"{sid} {name}", f"{latest['收盤價']} 元", f"{latest['漲跌價差']}")
+                fig = go.Figure(go.Scatter(x=df['日期'], y=df['收盤價'], mode='lines+markers', line=dict(width=3)))
+                fig.update_layout(height=280, margin=dict(l=0,r=0,t=20,b=0))
+                st.plotly_chart(fig, use_container_width=True)
+
+with tab2:
+    for sid, name in DISPLAY_NAMES.items():
+        st.subheader(f"📋 {sid} {name}")
+        if all_data.get(sid) is not None:
+            st.dataframe(all_data[sid].sort_index(ascending=False), use_container_width=True)
+
+with tab3:
+    st.subheader("📦 下載 PDF 報表")
+    if any(df is not None for df in all_data.values()):
+        try:
+            raw_pdf = create_advanced_pdf(all_data)
+            pdf_bytes = raw_pdf if isinstance(raw_pdf, (bytes, bytearray)) else raw_pdf.encode('latin-1')
+            st.download_button(
+                label="📄 點此下載完整 PDF 報表",
+                data=pdf_bytes,
+                file_name=f"Stock_Report_{datetime.now().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf"
+            )
+        except Exception as e:
+            st.error(f"PDF 產製錯誤: {e}")
