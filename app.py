@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 import urllib3
 from fpdf import FPDF
+import os
 
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -23,7 +24,6 @@ def fetch_twse_data(sid):
         data = res.json()
         if data.get('stat') == 'OK':
             df = pd.DataFrame(data['data'], columns=data['fields'])
-            # 數值清理
             for col in ['收盤價', '最高價', '最低價', '漲跌價差']:
                 df[col] = df[col].astype(str).str.replace(',', '').str.replace('+', '').str.replace('X', '')
                 df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -32,13 +32,10 @@ def fetch_twse_data(sid):
     except:
         return None
 
-# 定義股票清單
-STOCK_MAP = {"3714": "Ennostar", "6854": "PlayNitride", "3593": "Leading"}
 DISPLAY_NAMES = {"3714": "富采", "6854": "錼創科技-KY", "3593": "力銘"}
+all_data = {sid: fetch_twse_data(sid) for sid in DISPLAY_NAMES.keys()}
 
-all_data = {sid: fetch_twse_data(sid) for sid in STOCK_MAP.keys()}
-
-# --- 修改頁籤名稱 ---
+# --- 頁籤標題 ---
 tab1, tab2, tab3 = st.tabs(["📈 當日走勢", "📋 詳細數據", "📥 報表下載"])
 
 with tab1:
@@ -49,7 +46,6 @@ with tab1:
             df = all_data.get(sid)
             if df is not None and not df.empty:
                 latest = df.iloc[-1]
-                # 加上股票代碼
                 st.metric(f"{sid} {name}", f"{latest['收盤價']} 元", f"{latest['漲跌價差']}")
                 fig = go.Figure(go.Scatter(x=df['日期'], y=df['收盤價'], mode='lines+markers', line=dict(color=colors[i], width=3)))
                 fig.update_layout(height=280, margin=dict(l=0, r=0, t=20, b=0))
@@ -64,59 +60,62 @@ with tab2:
         st.divider()
 
 with tab3:
-    st.subheader("📦 專業 PDF 報表產出")
-    st.write("點擊按鈕下載包含歷史詳細數據的 PDF (每支股票獨立一頁)。")
+    st.subheader("📦 專業 PDF 報表產出 (支援中文)")
     
     def create_advanced_pdf(data_dict):
         pdf = FPDF()
+        
+        # --- 核心設定：載入中文字體 ---
+        # 假設你上傳的檔案叫做 chinese.ttf
+        font_path = "chinese.ttf"
+        if os.path.exists(font_path):
+            pdf.add_font('ChineseFont', '', font_path, uni=True)
+            font_name = 'ChineseFont'
+        else:
+            font_name = 'Arial' # 若沒字體則退回英文，避免報錯
+            st.warning("找不到 chinese.ttf，PDF 將以英文顯示")
+
         report_date = datetime.now().strftime("%Y-%m-%d")
         
         for sid, df in data_dict.items():
             if df is not None and not df.empty:
-                # 每一支股票開新頁
                 pdf.add_page()
                 
-                # 標題區
-                pdf.set_font("Arial", 'B', 16)
-                pdf.cell(190, 10, txt=f"Stock Detail Report - {sid}", ln=True, align='C')
-                pdf.set_font("Arial", '', 10)
-                pdf.cell(190, 10, txt=f"Report Date: {report_date} | Company: {STOCK_MAP[sid]}", ln=True, align='C')
-                pdf.ln(10)
+                # 標題 (使用中文字體)
+                pdf.set_font(font_name, '', 16)
+                pdf.cell(190, 10, txt=f"股票詳細報表 - {sid} {DISPLAY_NAMES[sid]}", ln=True, align='C')
                 
-                # 繪製表格表頭 (PDF 表格)
-                pdf.set_font("Arial", 'B', 10)
-                pdf.set_fill_color(240, 240, 240)
-                pdf.cell(40, 8, "Date", 1, 0, 'C', True)
-                pdf.cell(35, 8, "High", 1, 0, 'C', True)
-                pdf.cell(35, 8, "Low", 1, 0, 'C', True)
-                pdf.cell(40, 8, "Close", 1, 0, 'C', True)
-                pdf.cell(40, 8, "Change", 1, 1, 'C', True)
+                pdf.set_font(font_name, '', 10)
+                pdf.cell(190, 10, txt=f"報表日期: {report_date}", ln=True, align='C')
+                pdf.ln(5)
                 
-                # 填入數據內容 (只取最新 15 筆，避免單頁過長)
-                pdf.set_font("Arial", '', 9)
-                recent_df = df.tail(15).iloc[::-1] # 取最新15筆並反轉
-                for index, row in recent_df.iterrows():
+                # 表格標頭
+                pdf.set_fill_color(220, 230, 241)
+                pdf.cell(40, 8, "日期", 1, 0, 'C', True)
+                pdf.cell(35, 8, "最高價", 1, 0, 'C', True)
+                pdf.cell(35, 8, "最低價", 1, 0, 'C', True)
+                pdf.cell(40, 8, "收盤價", 1, 0, 'C', True)
+                pdf.cell(40, 8, "漲跌", 1, 1, 'C', True)
+                
+                # 填入數據 (最新 20 筆)
+                pdf.set_font(font_name, '', 9)
+                recent_df = df.tail(20).iloc[::-1]
+                for _, row in recent_df.iterrows():
                     pdf.cell(40, 7, str(row['日期']), 1, 0, 'C')
                     pdf.cell(35, 7, str(row['最高價']), 1, 0, 'C')
                     pdf.cell(35, 7, str(row['最低價']), 1, 0, 'C')
                     pdf.cell(40, 7, str(row['收盤價']), 1, 0, 'C')
                     pdf.cell(40, 7, str(row['漲跌價差']), 1, 1, 'C')
                 
-                pdf.ln(10)
-                pdf.set_font("Arial", 'I', 8)
-                pdf.cell(190, 10, txt="* This report is for informational purposes only.", ln=True, align='L')
-                
         return pdf.output(dest='S')
 
     if any(df is not None for df in all_data.values()):
         try:
-            raw_pdf = create_advanced_pdf(all_data)
-            pdf_bytes = raw_pdf if isinstance(raw_pdf, bytes) else raw_pdf.encode('latin-1')
-            
+            pdf_bytes = create_advanced_pdf(all_data)
             st.download_button(
-                label="📄 下載詳細數據 PDF (分頁版)",
+                label="📄 下載中文分頁 PDF 報表",
                 data=pdf_bytes,
-                file_name=f"Stock_Detailed_{datetime.now().strftime('%Y%m%d')}.pdf",
+                file_name=f"Stock_Report_{datetime.now().strftime('%Y%m%d')}.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
