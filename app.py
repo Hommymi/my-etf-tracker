@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 import urllib3
+from fpdf import FPDF # 重新引入 FPDF
 
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -37,8 +38,48 @@ def fetch_twse_data(sid):
 DISPLAY_NAMES = {"3714": "富采", "6854": "錼創科技-KY", "3593": "力銘"}
 all_data = {sid: fetch_twse_data(sid) for sid in DISPLAY_NAMES.keys()}
 
+# --- PDF 產生邏輯 (純英文版，穩定輸出) ---
+def create_pdf_report(data_dict):
+    pdf = FPDF()
+    report_date = datetime.now().strftime("%Y-%m-%d")
+
+    for sid, df in data_dict.items():
+        if df is not None and not df.empty:
+            pdf.add_page()
+            
+            # 頁面標題 (英文)
+            pdf.set_font('Arial', 'B', 16)
+            title = f"Stock Report - {sid} ({DISPLAY_NAMES.get(sid, '')})"
+            pdf.cell(190, 10, txt=title, ln=True, align='C')
+            
+            pdf.set_font('Arial', '', 10)
+            pdf.cell(190, 10, txt=f"Report Date: {report_date}", ln=True, align='C')
+            pdf.ln(5)
+            
+            # 表格標頭 (英文)
+            pdf.set_fill_color(220, 230, 241)
+            header = ["Date", "High", "Low", "Close", "Change"]
+            widths = [40, 35, 35, 40, 40]
+            pdf.set_font('Arial', 'B', 10)
+            for i, h in enumerate(header):
+                pdf.cell(widths[i], 8, h, 1, 0, 'C', True)
+            pdf.ln()
+            
+            # 填入數據 (英文)
+            pdf.set_font('Arial', '', 9)
+            recent_df = df.tail(20).iloc[::-1] # 最新 20 筆
+            for _, row in recent_df.iterrows():
+                pdf.cell(40, 7, str(row.get('日期', '--')), 1, 0, 'C')
+                pdf.cell(35, 7, str(row.get('最高價', '--')), 1, 0, 'C')
+                pdf.cell(35, 7, str(row.get('最低價', '--')), 1, 0, 'C')
+                pdf.cell(40, 7, str(row.get('收盤價', '--')), 1, 0, 'C')
+                pdf.cell(40, 7, str(row.get('漲跌價差', '--')), 1, 1, 'C')
+                
+    return pdf.output(dest='S')
+
+
 # --- 介面佈局 ---
-tab1, tab2, tab3 = st.tabs(["📈 當日走勢", "📋 詳細數據", "📥 數據下載中心"])
+tab1, tab2, tab3 = st.tabs(["📈 當日走勢", "📋 詳細數據", "📥 報表下載中心"])
 
 with tab1:
     cols = st.columns(3)
@@ -60,15 +101,34 @@ with tab2:
         st.subheader(f"📋 {sid} {name} 交易明細")
         df = all_data.get(sid)
         if df is not None:
-            # 最新日期排在最上面
             st.dataframe(df.sort_index(ascending=False), use_container_width=True)
         st.divider()
 
 with tab3:
-    st.subheader("📦 彙整數據下載")
-    st.write("下載包含所有監控個股之詳細交易數據。此 CSV 檔案已優化中文編碼，可直接於 Excel 開啟。")
+    st.subheader("📦 下載 Liteon 股票數據")
+    st.write("您可以選擇下載分頁的 **PDF 報告 (英文版)** 或支援中文的 **CSV 數據 (Excel 開啟)**。")
     
-    # 建立下載用 DataFrame
+    # --- PDF 下載按鈕 ---
+    if any(df is not None for df in all_data.values()):
+        try:
+            pdf_output = create_pdf_report(all_data)
+            pdf_bytes = pdf_output if isinstance(pdf_output, (bytes, bytearray)) else pdf_output.encode('latin-1')
+            
+            st.download_button(
+                label="📄 下載詳細 PDF 報表 (英文版)",
+                data=pdf_bytes,
+                file_name=f"Liteon_Stock_Report_{datetime.now().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"PDF 製作錯誤: {e}")
+    else:
+        st.warning("目前無數據可產製 PDF。")
+
+    st.markdown("---") # 分隔線
+    
+    # --- CSV 下載按鈕 ---
     csv_list = []
     for sid, name in DISPLAY_NAMES.items():
         df = all_data.get(sid)
@@ -80,15 +140,14 @@ with tab3:
     
     if csv_list:
         final_csv_df = pd.concat(csv_list)
-        # 轉換為 CSV 格式並加上 BOM (utf-8-sig)
-        csv_bytes = final_df = final_csv_df.to_csv(index=False).encode('utf-8-sig')
+        csv_bytes = final_csv_df.to_csv(index=False).encode('utf-8-sig')
         
         st.download_button(
-            label="📊 點此下載 Liteon 彙整數據 (CSV)",
+            label="📊 下載 Liteon 彙整數據 (CSV, 支援中文)",
             data=csv_bytes,
             file_name=f"Liteon_Stock_Data_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv",
             use_container_width=True
         )
     else:
-        st.warning("暫無可供下載的數據。")
+        st.warning("目前無數據可下載 CSV。")
